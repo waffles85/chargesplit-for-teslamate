@@ -1,0 +1,22 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# ESB smart-meter exports contain your MPRN and meter serial (personal data)
+*.csv
+HDF*
+
+# Database dumps / backups
+*.sql.gz
+*.dump
+*.bak
+*.tgz
+
+# Python / OS / editors
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+.idea/
+.vscode/

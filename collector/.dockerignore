@@ -1,0 +1,8 @@
+*
+!Dockerfile
+!requirements.txt
+!VERSION
+!schema.sql
+!collector.py
+!esb_import.py
+!import_history.py

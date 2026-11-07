@@ -1,0 +1,3 @@
+paho-mqtt==2.2.0
+psycopg2-binary==2.9.13
+requests==2.34.2

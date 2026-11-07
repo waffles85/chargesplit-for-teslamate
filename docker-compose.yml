@@ -1,0 +1,78 @@
+# ChargeSplit — runs as its own stack, next to (not inside) TeslaMate.
+# This project is an unofficial community tool and is not affiliated with, endorsed by,
+# or supported by the official TeslaMate project.
+
+name: chargesplit
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=chargesplit
+      - POSTGRES_PASSWORD=${DB_PASSWORD:?set DB_PASSWORD in .env}
+      - POSTGRES_DB=chargesplit
+    volumes:
+      - chargesplit-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chargesplit -d chargesplit"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  collector:
+    build: ./collector
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_HOST=db
+      - DATABASE_USER=chargesplit
+      - DATABASE_PASS=${DB_PASSWORD}
+      - DATABASE_NAME=chargesplit
+      - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:?set GRAFANA_DB_PASSWORD in .env}
+      - MYENERGI_HUB_SERIAL=${MYENERGI_HUB_SERIAL:?set MYENERGI_HUB_SERIAL in .env}
+      - MYENERGI_API_KEY=${MYENERGI_API_KEY:?set MYENERGI_API_KEY in .env}
+      - MYENERGI_ZAPPI_SERIAL=${MYENERGI_ZAPPI_SERIAL:-}
+      - HOME_GEOFENCE=${HOME_GEOFENCE:-Home}
+      - MQTT_HOST=${MQTT_HOST:-mosquitto}
+      - MQTT_PORT=${MQTT_PORT:-1883}
+      - MQTT_USERNAME=${MQTT_USERNAME:-}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-}
+      - MQTT_TLS=${MQTT_TLS:-false}
+      - MQTT_TOPIC_PREFIX=${MQTT_TOPIC_PREFIX:-teslamate}
+      - BACKFILL_DAYS=${BACKFILL_DAYS:-180}
+    networks:
+      - default
+      - mqtt            # to reach the MQTT broker; see README if your broker isn't in Docker
+
+  grafana:
+    image: grafana/grafana:13.3.0
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/chargesplit/chargesplit.json
+      - CHARGESPLIT_READER_PASSWORD=${GRAFANA_DB_PASSWORD}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards/chargesplit:ro
+      - chargesplit-grafana:/var/lib/grafana
+
+volumes:
+  chargesplit-db:
+  chargesplit-grafana:
+
+networks:
+  mqtt:
+    external: true
+    name: ${MQTT_DOCKER_NETWORK:-teslamate_default}
