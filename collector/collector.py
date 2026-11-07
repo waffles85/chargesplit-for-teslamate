@@ -17,6 +17,7 @@ import logging
 import os
 import pathlib
 import queue
+import re
 import sys
 import threading
 import time
@@ -38,6 +39,9 @@ HUB = os.environ.get("MYENERGI_HUB_SERIAL", "")
 KEY = os.environ.get("MYENERGI_API_KEY", "")
 ZAPPI = os.environ.get("MYENERGI_ZAPPI_SERIAL", "")
 HOME_GEOFENCE = os.getenv("HOME_GEOFENCE", "Home")
+OTHER_CAR_NAME_RAW = os.getenv("OTHER_CAR_NAME", "").strip()
+DASHBOARD_TEMPLATE = pathlib.Path(os.getenv("DASHBOARD_TEMPLATE", "/app/dashboard-template/chargesplit.json"))
+DASHBOARD_OUT = pathlib.Path(os.getenv("DASHBOARD_OUT", "/app/dashboard-out"))
 READER_PASSWORD = os.getenv("GRAFANA_DB_PASSWORD", "")
 
 MQTT_HOST = os.getenv("MQTT_HOST", "mosquitto")
@@ -59,6 +63,30 @@ ZAPPI_STATUS = {0: "Starting", 1: "Waiting for surplus", 2: "DSR", 3: "Charging"
 PLUG_STATUS = {"A": "EV disconnected", "B1": "EV connected", "B2": "Waiting for EV", "C1": "EV ready", "C2": "Charging", "F": "Fault"}
 
 
+def other_car_name(raw=None):
+    """Display name for the non-Tesla car. Letters, digits, spaces and . _ - only (it's used in SQL and JSON)."""
+    raw = (OTHER_CAR_NAME_RAW if raw is None else raw).strip()
+    if not raw:
+        return "Other car"
+    if not re.fullmatch(r"[\w .\-]{1,30}", raw) or raw.lower() == "tesla":
+        log.warning("OTHER_CAR_NAME %r not allowed (letters, digits, spaces, . _ - ; max 30; not 'Tesla') — using 'Other car'", raw)
+        return "Other car"
+    return raw
+
+
+def render_dashboard(name):
+    """Write the provisioned dashboard with the other car's name filled in."""
+    if not DASHBOARD_TEMPLATE.exists():
+        log.warning("dashboard template not found at %s — dashboard keeps its default names", DASHBOARD_TEMPLATE)
+        return
+    text = DASHBOARD_TEMPLATE.read_text(encoding="utf-8").replace("Other car", name)
+    DASHBOARD_OUT.mkdir(parents=True, exist_ok=True)
+    tmp = DASHBOARD_OUT / ".chargesplit.json.tmp"
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, DASHBOARD_OUT / "chargesplit.json")
+    log.info("dashboard ready (other car shown as '%s')", name)
+
+
 # ------------------------------------------------------------------ database
 def db():
     return psycopg2.connect(
@@ -74,8 +102,8 @@ def init_schema(conn):
     with conn, conn.cursor() as cur:
         cur.execute((HERE / "schema.sql").read_text())
         cur.execute("""INSERT INTO chargesplit.settings (key, value) VALUES
-                         ('home_geofence', %s), ('version', %s)
-                       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value""", (HOME_GEOFENCE, VERSION))
+                         ('home_geofence', %s), ('version', %s), ('other_car_name', %s)
+                       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value""", (HOME_GEOFENCE, VERSION, other_car_name()))
         if READER_PASSWORD:
             # read-only login for Grafana
             cur.execute("SELECT 1 FROM pg_roles WHERE rolname = 'chargesplit_reader'")
@@ -326,6 +354,7 @@ def main():
         sys.exit(1)
     conn = db()
     init_schema(conn)
+    render_dashboard(other_car_name())
     state = TeslaState()
     start_mqtt(state)
 

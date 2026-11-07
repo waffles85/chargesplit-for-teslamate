@@ -25,18 +25,19 @@ Free to use, non-commercial, AGPL-3.0.
 ```bash
 git clone https://github.com/waffles85/chargesplit-for-teslamate.git
 cd chargesplit-for-teslamate
-cp .env.example .env
-chmod 600 .env
+bash configure.sh
 ```
 
-Edit `.env`:
+`configure.sh` asks for each setting and writes `.env`, which only your user can read. It generates the database passwords itself and never displays secrets. It asks for:
 
-| Setting | What to put |
+| Setting | What to enter |
 |---|---|
-| `DB_PASSWORD`, `GRAFANA_DB_PASSWORD`, `GRAFANA_ADMIN_PASSWORD` | Three different long random passwords, e.g. from `openssl rand -base64 24` |
-| `MYENERGI_HUB_SERIAL`, `MYENERGI_API_KEY` | myaccount.myenergi.com → your hub → Advanced → Generate new API key |
-| `HOME_GEOFENCE` | The name of your home geofence in TeslaMate, e.g. `Home` |
-| `MQTT_DOCKER_NETWORK` | Only if your TeslaMate stack isn't using the default network name (check with `docker network ls`) |
+| Grafana admin password | Your login for the dashboard |
+| myenergi hub serial and API key | myaccount.myenergi.com → your hub → Advanced → Generate new API key |
+| Home geofence | The name of your home geofence in TeslaMate, e.g. `Home` |
+| Other car's name | What to call your non-Tesla car on the dashboard, e.g. `Leaf`. Defaults to "Other car". |
+
+If your TeslaMate stack doesn't use the default Docker network name, also set `MQTT_DOCKER_NETWORK` in `.env` (check with `docker network ls`). You can also copy `.env.example` to `.env` and edit it by hand instead.
 
 Start it:
 
@@ -69,6 +70,15 @@ Set `MQTT_HOST` (and `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `MQTT_TLS` a
 Costs are energy only. The standing charge is shown in the bill estimate but not split between cars. Levies such as PSO aren't included.
 
 **Precision:** Tesla sessions are accurate to about 30 s. Other-car sessions are accurate to the minute: the Zappi has one cable, so every charging minute outside a Tesla session is the other car's. Minute data is fetched only for days with charging; if it's unavailable for a day, that day falls back to hourly blocks. Costs always come from the metered hourly kWh, so precision doesn't change them.
+
+## Renaming the other car
+
+```bash
+bash configure.sh --name
+docker compose up -d
+```
+
+The dashboard updates within a minute.
 
 ## Your tariff
 

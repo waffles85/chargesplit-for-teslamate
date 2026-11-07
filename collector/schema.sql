@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS chargesplit.settings (
 );
 INSERT INTO chargesplit.settings (key, value) VALUES
     ('home_geofence', 'Home'),          -- overwritten from HOME_GEOFENCE at every start
-    ('other_car_noise_kwh', '0.3')      -- per-hour residual below this (while the Tesla charges) is metering noise
+    ('other_car_noise_kwh', '0.3'),     -- per-hour residual below this (while the Tesla charges) is metering noise
+    ('other_car_name', 'Other car')     -- overwritten from OTHER_CAR_NAME at every start
 ON CONFLICT (key) DO NOTHING;
 
 -- ---------------------------------------------------------------- tariff
@@ -104,6 +105,11 @@ LANGUAGE sql STABLE AS $$
     -- matches "Home", "home", "🏡 Home" etc. against the configured geofence name
     SELECT lower(regexp_replace(coalesce(g, ''), '^[^[:alnum:]]+', ''))
          = lower(regexp_replace((SELECT value FROM chargesplit.settings WHERE key = 'home_geofence'), '^[^[:alnum:]]+', ''))
+$$;
+
+CREATE OR REPLACE FUNCTION chargesplit.other_car_name() RETURNS text
+LANGUAGE sql STABLE AS $$
+    SELECT COALESCE((SELECT value FROM chargesplit.settings WHERE key = 'other_car_name'), 'Other car')
 $$;
 
 CREATE OR REPLACE FUNCTION chargesplit.is_night(ts timestamptz) RETURNS boolean
@@ -300,12 +306,12 @@ omn AS (
 ),
 omg AS (SELECT *, SUM(new_session) OVER (ORDER BY ts) AS sid FROM omn),
 other_minute AS (
-    SELECT 'Other car'::text, MIN(ts), MAX(ts) + interval '1 minute', SUM(zappi_kwh),
+    SELECT chargesplit.other_car_name(), MIN(ts), MAX(ts) + interval '1 minute', SUM(zappi_kwh),
            SUM(zappi_kwh * chargesplit.rate_c(ts)) / 100, 'to the minute'::text
     FROM omg GROUP BY sid HAVING SUM(zappi_kwh) >= 0.2
 ),
 other_hourly AS (   -- fallback for days without minute data
-    SELECT 'Other car'::text, MIN(hour_utc), MAX(hour_utc) + interval '1 hour',
+    SELECT chargesplit.other_car_name(), MIN(hour_utc), MAX(hour_utc) + interval '1 hour',
            SUM(other_car_kwh), SUM(other_car_eur), 'to the hour'::text
     FROM (
         SELECT hour_utc, other_car_kwh, other_car_eur,

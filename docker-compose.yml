@@ -36,6 +36,7 @@ services:
       - MYENERGI_API_KEY=${MYENERGI_API_KEY:?set MYENERGI_API_KEY in .env}
       - MYENERGI_ZAPPI_SERIAL=${MYENERGI_ZAPPI_SERIAL:-}
       - HOME_GEOFENCE=${HOME_GEOFENCE:-Home}
+      - OTHER_CAR_NAME=${OTHER_CAR_NAME:-Other car}
       - MQTT_HOST=${MQTT_HOST:-mosquitto}
       - MQTT_PORT=${MQTT_PORT:-1883}
       - MQTT_USERNAME=${MQTT_USERNAME:-}
@@ -43,6 +44,9 @@ services:
       - MQTT_TLS=${MQTT_TLS:-false}
       - MQTT_TOPIC_PREFIX=${MQTT_TOPIC_PREFIX:-teslamate}
       - BACKFILL_DAYS=${BACKFILL_DAYS:-180}
+    volumes:
+      - ./grafana/dashboards:/app/dashboard-template:ro
+      - chargesplit-dashboards:/app/dashboard-out     # dashboard with your car names filled in
     networks:
       - default
       - mqtt            # to reach the MQTT broker; see README if your broker isn't in Docker
@@ -65,12 +69,13 @@ services:
       - CHARGESPLIT_READER_PASSWORD=${GRAFANA_DB_PASSWORD}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards/chargesplit:ro
+      - chargesplit-dashboards:/var/lib/grafana/dashboards/chargesplit:ro
       - chargesplit-grafana:/var/lib/grafana
 
 volumes:
   chargesplit-db:
   chargesplit-grafana:
+  chargesplit-dashboards:
 
 networks:
   mqtt:

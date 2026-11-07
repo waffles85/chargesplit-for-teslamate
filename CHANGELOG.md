@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0 — 2026-11-07
+- Name your non-Tesla car (`OTHER_CAR_NAME`); the dashboard uses it everywhere instead of "Other car".
+- New `configure.sh`: interactive setup of `.env` (generates database passwords, never shows secrets); `--name` changes just the car name.
+
 ## 1.1.0 — 2026-11-07
 - Other car's sessions are now accurate to the minute, using the Zappi's per-minute history (fetched only for days with charging, including a one-off backfill). Days without minute data fall back to hourly blocks.
 - Costs unchanged: still priced from metered hourly kWh.
