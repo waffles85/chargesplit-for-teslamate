@@ -7,6 +7,7 @@ ChargeSplit works out what each of your cars costs to charge at home when two ca
 It gets the Tesla's charging from TeslaMate's MQTT feed and the Zappi and grid figures from the myenergi API. It works out the other car's share as **Zappi minus Tesla**, then prices everything on your day/night tariff. The results appear in a live Grafana dashboard:
 
 - **Live** (every 30 s): grid power, Zappi output, Tesla, other car, the current rate.
+- **Power history, per minute:** grid, Tesla and other car for any period, as far back as your Zappi history goes.
 - **Per car, per month:** € cost, kWh, effective c/kWh, and the share charged at the night rate.
 - **Charging times:** when each car charged, start and end times of day against the night-rate window, and a sessions table.
 - **Totals and trends:** estimated bill, charging's share of it, daily kWh and € by Tesla / other car / rest of house.
@@ -70,7 +71,14 @@ Set `MQTT_HOST` (and `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `MQTT_TLS` a
 
 Costs are energy only. The standing charge is shown in the bill estimate but not split between cars. Levies such as PSO aren't included.
 
-**Precision:** Tesla sessions are accurate to about 30 s. Other-car sessions are accurate to the minute: the Zappi has one cable, so every charging minute outside a Tesla session is the other car's. Minute data is fetched only for days with charging; if it's unavailable for a day, that day falls back to hourly blocks. Costs always come from the metered hourly kWh, so precision doesn't change them.
+**Detail, by default:** ChargeSplit stores the finest data each source offers, with nothing to switch on.
+- **myenergi's per-minute history:** grid import and Zappi output, back-filled on install.
+- **Zappi live readings every 30 s**, kept forever.
+- **Tesla charging snapshots** at every change TeslaMate reports, plus every 30 s.
+
+You can tune `LIVE_SECONDS` (Zappi polling interval) and `LIVE_RETENTION_DAYS` (0 = keep forever) in `.env`. A year of 30-second readings is about a million rows, roughly 100 MB.
+
+**Precision:** Tesla sessions are accurate to about 30 s. Other-car sessions are accurate to the minute: the Zappi has one cable, so every charging minute outside a Tesla session is the other car's. Minute data is fetched for every day of your history; if it’s unavailable for a day, that day falls back to hourly blocks. Costs always come from the metered hourly kWh, so precision doesn't change them.
 
 ## Renaming the other car
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0 — 2026-11-08
+- Most detailed data by default:
+  - per-minute grid import and Zappi output for your whole history, back-filled on install (and on upgrade)
+  - 30-second live readings kept forever instead of 35 days
+  - a Tesla snapshot at every charging-power change TeslaMate reports
+- New Power history chart: grid, Tesla and other car per minute, for any period.
+- Live power now always shows the last 6 hours.
+
 ## 1.3.1 — 2026-11-08
 - `tariff.sh list` shows a setup tariff as "the start" instead of 2000-01-01; `tariff.sh remove start` removes it.
 - The "no tariff" note after `tariff.sh add` only appears when some of your history really has no tariff, and says which date to use.

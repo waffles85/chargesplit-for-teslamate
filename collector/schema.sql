@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS chargesplit.myenergi_minute_days (
     complete   boolean NOT NULL DEFAULT false,
     fetched_at timestamptz NOT NULL DEFAULT now()
 );
+-- 1.4: minute data also holds grid import, for the per-minute power history
+ALTER TABLE chargesplit.myenergi_minute      ADD COLUMN IF NOT EXISTS import_kwh  numeric NOT NULL DEFAULT 0;
+ALTER TABLE chargesplit.myenergi_minute_days ADD COLUMN IF NOT EXISTS with_import boolean NOT NULL DEFAULT false;
 
 -- Optional ESB Networks smart-meter 30-min intervals. Overrides the CT for grid import where present.
 CREATE TABLE IF NOT EXISTS chargesplit.esb_interval (
@@ -259,6 +262,39 @@ SELECT
     chargesplit.rate_c(now()) AS rate_c
 FROM t LEFT JOIN z ON true;
 
+-- ---------------------------------------------------------------- Tesla charging windows
+-- When the Tesla was charging at home (live MQTT sessions + imported history), padded by 2 minutes.
+-- The Zappi has one cable, so Zappi output inside these windows is the Tesla; outside, the other car.
+DROP MATERIALIZED VIEW IF EXISTS chargesplit.tesla_windows CASCADE;
+CREATE MATERIALIZED VIEW chargesplit.tesla_windows AS
+WITH te AS (
+    SELECT car_id, ts, end_ts,
+           CASE WHEN ts - LAG(ts) OVER (PARTITION BY car_id ORDER BY ts) > interval '5 minutes'
+                  OR LAG(ts) OVER (PARTITION BY car_id ORDER BY ts) IS NULL THEN 1 ELSE 0 END AS new_session
+    FROM chargesplit.tesla_home_energy
+),
+tg AS (SELECT *, SUM(new_session) OVER (PARTITION BY car_id ORDER BY ts) AS sid FROM te)
+SELECT MIN(ts) - interval '2 minutes' AS w_start, MAX(end_ts) + interval '2 minutes' AS w_end
+FROM tg GROUP BY car_id, sid
+UNION ALL
+SELECT s.start_utc - interval '2 minutes', s.end_utc + interval '2 minutes'
+FROM chargesplit.tesla_import_sessions s
+WHERE s.start_utc < COALESCE((SELECT MIN(ts) FROM chargesplit.tesla_snapshots), 'infinity');
+CREATE INDEX ON chargesplit.tesla_windows (w_start);
+
+-- ---------------------------------------------------------------- per-minute power history
+-- Average power per minute (kW) from myenergi's per-minute data. Times without minute data have no rows.
+CREATE OR REPLACE VIEW chargesplit.power_minute AS
+SELECT m.ts,
+       m.import_kwh * 60 AS grid_kw,
+       CASE WHEN t.tesla_on THEN m.zappi_kwh * 60 ELSE 0 END AS tesla_kw,
+       CASE WHEN t.tesla_on THEN 0 ELSE m.zappi_kwh * 60 END AS other_kw
+FROM chargesplit.myenergi_minute m
+CROSS JOIN LATERAL (
+    SELECT COALESCE((SELECT w.w_end > m.ts FROM chargesplit.tesla_windows w
+                     WHERE w.w_start <= m.ts ORDER BY w.w_start DESC LIMIT 1), false) AS tesla_on
+) t;
+
 -- ---------------------------------------------------------------- charging sessions per car
 -- Tesla: from MQTT snapshots (to ~30 s) or imported history.
 -- Other car: the Zappi has one cable, so any charging minute outside a Tesla session is the other car
@@ -289,11 +325,10 @@ imported AS (
     FROM chargesplit.tesla_import_sessions s
     WHERE s.start_utc < COALESCE((SELECT MIN(ts) FROM chargesplit.tesla_snapshots), 'infinity')
 ),
-tesla_windows AS (
-    SELECT start_utc - interval '2 minutes' AS w_start, COALESCE(end_utc, now()) + interval '2 minutes' AS w_end FROM tesla
-    UNION ALL
-    SELECT start_utc - interval '2 minutes', end_utc + interval '2 minutes' FROM imported
+live_window AS (   -- a Tesla session still in progress (newer than the last matview refresh)
+    SELECT start_utc - interval '2 minutes' AS w_start, now() + interval '2 minutes' AS w_end FROM tesla WHERE end_utc IS NULL
 ),
+tesla_windows AS (SELECT w_start, w_end FROM chargesplit.tesla_windows UNION ALL SELECT * FROM live_window),
 om AS (   -- charging minutes (>= ~1 kW) not inside any Tesla session
     SELECT m.ts, m.zappi_kwh
     FROM chargesplit.myenergi_minute m

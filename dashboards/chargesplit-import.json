@@ -9,7 +9,7 @@
   "timezone": "browser",
   "refresh": "30s",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "editable": true,
   "time": {
     "from": "now-30d",
@@ -385,13 +385,13 @@
     },
     {
       "type": "timeseries",
-      "title": "Live power",
+      "title": "Live power (last 6 hours, every 30 s)",
       "id": 8,
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "${DS_CHARGESPLIT}"
       },
-      "description": "Zappi: 30-second samples from myenergi. Tesla: charging power received from TeslaMate over MQTT.",
+      "description": "30-second readings: Zappi from myenergi, Tesla from TeslaMate's MQTT feed. Always shows the last 6 hours — see Power history below for any period.",
       "gridPos": {
         "h": 8,
         "w": 24,
@@ -504,6 +504,122 @@
           "rawSql": "SELECT $__timeGroupAlias(ts, $__interval), avg(kw) AS \"Tesla\"\nFROM chargesplit.tesla_snapshots\nWHERE $__timeFilter(ts) AND charging AND chargesplit.is_home(geofence)\nGROUP BY 1 ORDER BY 1",
           "refId": "B"
         }
+      ],
+      "timeFrom": "6h",
+      "hideTimeOverride": true
+    },
+    {
+      "type": "timeseries",
+      "title": "Power history (per minute, any period)",
+      "id": 41,
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_CHARGESPLIT}"
+      },
+      "description": "Average power from the Zappi's per-minute history: grid import, and Zappi output split between the Tesla and Other car (one cable, so each minute belongs to one car). Zoom in for minute detail; longer periods are averaged.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "interval": "1m",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "kwatt",
+          "decimals": 2,
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": false,
+            "axisSoftMin": 0,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Grid"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#FF9830"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Tesla"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E31937"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Other car"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8F3BB8"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_CHARGESPLIT}"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "refId": "A",
+          "rawSql": "SELECT $__timeGroupAlias(ts, $__interval), avg(grid_kw) AS \"Grid\", avg(tesla_kw) AS \"Tesla\", avg(other_kw) AS \"Other car\"\nFROM chargesplit.power_minute\nWHERE $__timeFilter(ts)\nGROUP BY 1 ORDER BY 1"
+        }
       ]
     },
     {
@@ -515,7 +631,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 13
+        "y": 22
       },
       "panels": []
     },
@@ -531,7 +647,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 14
+        "y": 23
       },
       "fieldConfig": {
         "defaults": {
@@ -584,7 +700,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 14
+        "y": 23
       },
       "fieldConfig": {
         "defaults": {
@@ -637,7 +753,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 14
+        "y": 23
       },
       "fieldConfig": {
         "defaults": {
@@ -690,7 +806,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 14
+        "y": 23
       },
       "fieldConfig": {
         "defaults": {
@@ -743,7 +859,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 27
       },
       "fieldConfig": {
         "defaults": {
@@ -835,7 +951,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 36
       },
       "fieldConfig": {
         "defaults": {
@@ -1015,7 +1131,7 @@
         "h": 9,
         "w": 10,
         "x": 0,
-        "y": 35
+        "y": 44
       },
       "fieldConfig": {
         "defaults": {
@@ -1107,7 +1223,7 @@
         "h": 9,
         "w": 14,
         "x": 10,
-        "y": 35
+        "y": 44
       },
       "fieldConfig": {
         "defaults": {
@@ -1219,7 +1335,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 44
+        "y": 53
       },
       "panels": []
     },
@@ -1236,7 +1352,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 45
+        "y": 54
       },
       "fieldConfig": {
         "defaults": {
@@ -1375,7 +1491,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 52
+        "y": 61
       },
       "fieldConfig": {
         "defaults": {
@@ -1565,7 +1681,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 62
+        "y": 71
       },
       "fieldConfig": {
         "defaults": {
@@ -1667,7 +1783,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 71
+        "y": 80
       },
       "panels": []
     },
@@ -1684,7 +1800,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 72
+        "y": 81
       },
       "fieldConfig": {
         "defaults": {
@@ -1739,7 +1855,7 @@
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 72
+        "y": 81
       },
       "fieldConfig": {
         "defaults": {
@@ -1794,7 +1910,7 @@
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 72
+        "y": 81
       },
       "fieldConfig": {
         "defaults": {
@@ -1849,7 +1965,7 @@
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 72
+        "y": 81
       },
       "fieldConfig": {
         "defaults": {
@@ -1904,7 +2020,7 @@
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 72
+        "y": 81
       },
       "fieldConfig": {
         "defaults": {
@@ -1959,7 +2075,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 72
+        "y": 81
       },
       "fieldConfig": {
         "defaults": {
@@ -2014,7 +2130,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 76
+        "y": 85
       },
       "fieldConfig": {
         "defaults": {
@@ -2069,7 +2185,7 @@
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 76
+        "y": 85
       },
       "fieldConfig": {
         "defaults": {
@@ -2124,7 +2240,7 @@
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 76
+        "y": 85
       },
       "fieldConfig": {
         "defaults": {
@@ -2179,7 +2295,7 @@
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 76
+        "y": 85
       },
       "fieldConfig": {
         "defaults": {
@@ -2234,7 +2350,7 @@
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 76
+        "y": 85
       },
       "fieldConfig": {
         "defaults": {
@@ -2289,7 +2405,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 76
+        "y": 85
       },
       "fieldConfig": {
         "defaults": {
@@ -2339,7 +2455,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 80
+        "y": 89
       },
       "panels": []
     },
@@ -2356,7 +2472,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 81
+        "y": 90
       },
       "fieldConfig": {
         "defaults": {
@@ -2467,7 +2583,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 81
+        "y": 90
       },
       "fieldConfig": {
         "defaults": {
@@ -2589,7 +2705,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 90
+        "y": 99
       },
       "panels": []
     },
@@ -2606,7 +2722,7 @@
         "h": 10,
         "w": 14,
         "x": 0,
-        "y": 91
+        "y": 100
       },
       "fieldConfig": {
         "defaults": {
@@ -2680,7 +2796,7 @@
         "h": 10,
         "w": 10,
         "x": 14,
-        "y": 91
+        "y": 100
       },
       "fieldConfig": {
         "defaults": {

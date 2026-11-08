@@ -51,6 +51,8 @@ services:
       - MQTT_TLS=${MQTT_TLS:-false}
       - MQTT_TOPIC_PREFIX=${MQTT_TOPIC_PREFIX:-teslamate}
       - BACKFILL_DAYS=${BACKFILL_DAYS:-180}
+      - LIVE_SECONDS=${LIVE_SECONDS:-30}                  # Zappi live polling interval
+      - LIVE_RETENTION_DAYS=${LIVE_RETENTION_DAYS:-0}     # 0 = keep 30-second readings forever
     volumes:
       - ./grafana/dashboards:/app/dashboard-template:ro
       - chargesplit-dashboards:/app/dashboard-out     # dashboard with your car names filled in

@@ -169,6 +169,7 @@ def main():
 
     with conn, conn.cursor() as cur:
         cur.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY chargesplit.tesla_home_hourly")
+        cur.execute("REFRESH MATERIALIZED VIEW chargesplit.tesla_windows")
     print("dashboard figures updated")
 
 

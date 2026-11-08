@@ -54,7 +54,7 @@ MQTT_PREFIX = os.getenv("MQTT_TOPIC_PREFIX", "teslamate").rstrip("/")
 LIVE_SECONDS = int(os.getenv("LIVE_SECONDS", "30"))
 HISTORY_SECONDS = int(os.getenv("HISTORY_SECONDS", "300"))
 BACKFILL_DAYS = int(os.getenv("BACKFILL_DAYS", "180"))
-LIVE_RETENTION_DAYS = int(os.getenv("LIVE_RETENTION_DAYS", "35"))
+LIVE_RETENTION_DAYS = int(os.getenv("LIVE_RETENTION_DAYS", "0"))   # 0 = keep forever
 J_PER_KWH = 3_600_000
 
 TOPICS = ("charging_state", "charger_power", "charger_actual_current", "charger_voltage",
@@ -202,15 +202,16 @@ class MyEnergi:
 
 
 def day_minutes(me, sno, day):
-    """Per-minute Zappi output for one UTC day: [(ts, kWh)] for minutes with charging."""
+    """Per-minute Zappi output and grid import for one UTC day: [(ts, zappi kWh, import kWh)]."""
     data = me.get(f"cgi-jday-Z{sno}-{day.year}-{day.month}-{day.day}")
     rows = next((v for v in data.values() if isinstance(v, list)), [])
     out = []
     for r in rows:
-        j = sum(r.get(k, 0) for k in ("h1b", "h2b", "h3b", "h1d", "h2d", "h3d"))
-        if j > 0:
+        z = sum(r.get(k, 0) for k in ("h1b", "h2b", "h3b", "h1d", "h2d", "h3d"))
+        imp = r.get("imp", 0)
+        if z > 0 or imp > 0:
             ts = dt.datetime(r["yr"], r["mon"], r["dom"], r.get("hr", 0), r.get("min", 0), tzinfo=dt.timezone.utc)
-            out.append((ts, j / J_PER_KWH))
+            out.append((ts, z / J_PER_KWH, imp / J_PER_KWH))
     return out
 
 
@@ -219,10 +220,10 @@ def save_minutes(conn, day, rows):
     with conn, conn.cursor() as cur:
         if rows:
             psycopg2.extras.execute_values(cur, """
-                INSERT INTO chargesplit.myenergi_minute (ts, zappi_kwh) VALUES %s
-                ON CONFLICT (ts) DO UPDATE SET zappi_kwh = EXCLUDED.zappi_kwh""", rows)
-        cur.execute("""INSERT INTO chargesplit.myenergi_minute_days (day, complete) VALUES (%s, %s)
-                       ON CONFLICT (day) DO UPDATE SET complete = EXCLUDED.complete, fetched_at = now()""",
+                INSERT INTO chargesplit.myenergi_minute (ts, zappi_kwh, import_kwh) VALUES %s
+                ON CONFLICT (ts) DO UPDATE SET zappi_kwh = EXCLUDED.zappi_kwh, import_kwh = EXCLUDED.import_kwh""", rows)
+        cur.execute("""INSERT INTO chargesplit.myenergi_minute_days (day, complete, with_import) VALUES (%s, %s, true)
+                       ON CONFLICT (day) DO UPDATE SET complete = EXCLUDED.complete, with_import = true, fetched_at = now()""",
                     (day, complete))
 
 
@@ -232,14 +233,14 @@ def backfill_minutes(conn, me, sno, sleep=time.sleep):
         cur.execute("""
             SELECT DISTINCT (hour_utc AT TIME ZONE 'UTC')::date AS day
             FROM chargesplit.myenergi_hourly h
-            WHERE zappi_kwh > 0.1
+            WHERE (zappi_kwh > 0 OR import_kwh > 0)
               AND NOT EXISTS (SELECT 1 FROM chargesplit.myenergi_minute_days d
-                              WHERE d.day = (h.hour_utc AT TIME ZONE 'UTC')::date AND d.complete)
+                              WHERE d.day = (h.hour_utc AT TIME ZONE 'UTC')::date AND d.complete AND d.with_import)
             ORDER BY 1""")
         days = [r[0] for r in cur.fetchall()]
     if not days:
         return
-    log.info("fetching minute-by-minute charging data for %d days", len(days))
+    log.info("fetching minute-by-minute history for %d days (about 1 s each)", len(days))
     for i, day in enumerate(days, 1):
         try:
             save_minutes(conn, day, day_minutes(me, sno, day))
@@ -320,13 +321,19 @@ class TeslaState:
         except (TypeError, ValueError):
             return None
 
+    POWER_FIELDS = ("charger_power", "charger_actual_current", "charger_voltage", "charger_phases")
+
     def update(self, car_id, field, payload, now=None):
         now = now or dt.datetime.now(dt.timezone.utc)
         with self.lock:
             car = self.cars.setdefault(car_id, {})
-            before = car.get("charging_state")
+            before = car.get(field)
             car[field] = payload if field in ("charging_state", "geofence") else self._num(payload)
-            if field == "charging_state" and payload != before:
+            changed = car[field] != before
+            # snapshot at every charging-state change, and at every power change while charging,
+            # so the Tesla's history is as detailed as TeslaMate's feed (plus a snapshot every LIVE_SECONDS)
+            if changed and (field == "charging_state"
+                            or (field in self.POWER_FIELDS and car.get("charging_state") == "Charging")):
                 self.events.put((now, car_id))
 
     def snapshot(self, car_id):
@@ -420,7 +427,9 @@ def main():
                 next_history = now + HISTORY_SECONDS
                 with conn, conn.cursor() as cur:  # Tesla figures refresh even if myenergi is down
                     cur.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY chargesplit.tesla_home_hourly")
-                    cur.execute("DELETE FROM chargesplit.live WHERE ts < now() - %s * interval '1 day'", (LIVE_RETENTION_DAYS,))
+                    cur.execute("REFRESH MATERIALIZED VIEW chargesplit.tesla_windows")
+                    if LIVE_RETENTION_DAYS > 0:
+                        cur.execute("DELETE FROM chargesplit.live WHERE ts < now() - %s * interval '1 day'", (LIVE_RETENTION_DAYS,))
                 today = dt.datetime.now(dt.timezone.utc).date()
                 for d in (today - dt.timedelta(days=1), today):
                     save_hours(conn, me.day_hours(sno, d))
