@@ -74,6 +74,41 @@ def other_car_name(raw=None):
     return raw
 
 
+def tariff_from_env():
+    """Tariff entered in configure.sh (.env). Returns a row tuple, or None if not set / invalid."""
+    g = lambda k: os.getenv(k, "").strip()
+    day, night, standing = g("TARIFF_DAY_C"), g("TARIFF_NIGHT_C"), g("TARIFF_STANDING_C")
+    if not (day and night and standing):
+        return None
+    try:
+        vals = [float(x) for x in (day, night, standing)]
+        ns, ne = g("TARIFF_NIGHT_START") or "23:00", g("TARIFF_NIGHT_END") or "08:00"
+        for t in (ns, ne):
+            dt.datetime.strptime(t, "%H:%M")
+        start = dt.date.fromisoformat(g("TARIFF_FROM") or "2000-01-01")
+        if ns == ne or any(v < 0 for v in vals):
+            raise ValueError("night start/end equal or negative rate")
+    except ValueError as e:
+        log.warning("tariff in .env ignored (%s) — use tariff.sh to set it", e)
+        return None
+    return (start, g("TARIFF_SUPPLIER") or None, "Day/Night", vals[0], vals[1], ns, ne, vals[2])
+
+
+def seed_tariff(conn):
+    """First start only: apply the tariff from .env and drop the example. Later changes: tariff.sh."""
+    row = tariff_from_env()
+    if not row:
+        return
+    with conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) FILTER (WHERE supplier IS DISTINCT FROM 'Example') FROM chargesplit.tariff")
+        if cur.fetchone()[0] > 0:
+            return  # user already manages tariffs
+        cur.execute("DELETE FROM chargesplit.tariff WHERE supplier = 'Example'")
+        cur.execute("INSERT INTO chargesplit.tariff VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (valid_from) DO NOTHING", row)
+    log.info("tariff from setup applied: day %sc, night %sc (%s–%s), standing %sc/day, from %s",
+             row[3], row[4], row[5], row[6], row[7], row[0])
+
+
 def render_dashboard(name):
     """Write the provisioned dashboard with the other car's name filled in."""
     if not DASHBOARD_TEMPLATE.exists():
@@ -354,6 +389,7 @@ def main():
         sys.exit(1)
     conn = db()
     init_schema(conn)
+    seed_tariff(conn)
     render_dashboard(other_car_name())
     state = TeslaState()
     start_mqtt(state)

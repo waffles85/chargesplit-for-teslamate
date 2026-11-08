@@ -2,6 +2,7 @@
 # ChargeSplit — interactive setup of .env.
 #   bash configure.sh            first-time setup (asks for everything)
 #   bash configure.sh --name     change only the other car's name
+# Tariff changes after the first start: bash tariff.sh
 # Secrets are never shown. Existing values are kept unless you type a new one.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -20,6 +21,35 @@ ask_secret() { # ask_secret VAR "question"  (keeps current value on Enter)
     printf '%s%s: ' "$2" "${cur:+ [press Enter to keep current]}"; read -rs ans; echo
     if [ -n "$ans" ]; then put "$1" "$ans"
     elif [ -z "$cur" ]; then echo "  required — try again"; ask_secret "$1" "$2"; fi
+}
+ask_num() { # ask_num VAR "question"
+    local cur ans; cur=$(get "$1")
+    while :; do
+        printf '%s%s: ' "$2" "${cur:+ [$cur]}"; read -r ans; ans="${ans:-$cur}"
+        if [ -z "$ans" ] || printf '%s' "$ans" | grep -Eq '^[0-9]+([.][0-9]+)?$'; then put "$1" "$ans"; return; fi
+        echo "  a number like 27.577 — try again"
+    done
+}
+ask_time() { # ask_time VAR "question" default
+    local cur ans; cur=$(get "$1"); cur="${cur:-$3}"
+    while :; do
+        printf '%s [%s]: ' "$2" "$cur"; read -r ans; ans="${ans:-$cur}"
+        if printf '%s' "$ans" | grep -Eq '^([01][0-9]|2[0-3]):[0-5][0-9]$'; then put "$1" "$ans"; return; fi
+        echo "  a time like 23:00 — try again"
+    done
+}
+ask_tariff() {
+    echo
+    echo "Your electricity tariff — rates in cents, as on your bill (leave the rates blank to start with an example)."
+    ask TARIFF_SUPPLIER "Supplier (optional)"
+    ask_num TARIFF_DAY_C "Day rate c/kWh"
+    ask_num TARIFF_NIGHT_C "Night rate c/kWh"
+    ask_time TARIFF_NIGHT_START "Night rate starts (HH:MM)" "23:00"
+    ask_time TARIFF_NIGHT_END "Night rate ends (HH:MM)" "08:00"
+    ask_num TARIFF_STANDING_C "Standing charge c/day"
+    if [ "$(get TARIFF_NIGHT_START)" = "$(get TARIFF_NIGHT_END)" ]; then
+        echo "  night start and end can't be the same — let's redo the times"; ask_tariff; return
+    fi
 }
 ask_name() {
     local cur ans; cur=$(get OTHER_CAR_NAME)
@@ -50,6 +80,9 @@ else
     ask_secret MYENERGI_API_KEY "myenergi API key"
     ask HOME_GEOFENCE "Name of your home geofence in TeslaMate" "Home"
     ask_name
+    ask_tariff
+    echo
+    echo "The tariff is applied when ChargeSplit first starts. For later changes, use: bash tariff.sh"
 fi
 
 echo

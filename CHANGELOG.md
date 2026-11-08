@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.0 — 2026-11-08
+- Tariffs without SQL: `configure.sh` asks for your tariff during setup (applied on first start), and the new `tariff.sh` lists, adds and removes tariffs while running.
+- Fix: the example tariff no longer comes back after a restart once you've removed it.
+
 ## 1.2.0 — 2026-11-07
 - Name your non-Tesla car (`OTHER_CAR_NAME`); the dashboard uses it everywhere instead of "Other car".
 - New `configure.sh`: interactive setup of `.env` (generates database passwords, never shows secrets); `--name` changes just the car name.

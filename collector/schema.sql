@@ -27,9 +27,10 @@ CREATE TABLE IF NOT EXISTS chargesplit.tariff (
     standing_c_per_day numeric NOT NULL
 );
 -- Example Irish day/night tariff only. Replace with your own — see README.
-INSERT INTO chargesplit.tariff VALUES
-    ('2026-01-01', 'Example', 'Day/Night', 27.577, 13.462, '23:00', '08:00', 90.361)
-ON CONFLICT (valid_from) DO NOTHING;
+-- Only seeded when the table is empty, so a deleted example never comes back.
+INSERT INTO chargesplit.tariff
+SELECT '2026-01-01', 'Example', 'Day/Night', 27.577, 13.462, '23:00', '08:00', 90.361
+WHERE NOT EXISTS (SELECT 1 FROM chargesplit.tariff);
 
 -- ---------------------------------------------------------------- raw data
 -- Hourly history from myenergi (Zappi grid CT + Zappi output), kWh.

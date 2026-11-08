@@ -36,6 +36,7 @@ bash configure.sh
 | myenergi hub serial and API key | myaccount.myenergi.com → your hub → Advanced → Generate new API key |
 | Home geofence | The name of your home geofence in TeslaMate, e.g. `Home` |
 | Other car's name | What to call your non-Tesla car on the dashboard, e.g. `Leaf`. Defaults to "Other car". |
+| Tariff | Day and night rates (c/kWh), night-rate hours, standing charge (c/day). Leave blank to start with an example and set it later with `tariff.sh`. |
 
 If your TeslaMate stack doesn't use the default Docker network name, also set `MQTT_DOCKER_NETWORK` in `.env` (check with `docker network ls`). You can also copy `.env.example` to `.env` and edit it by hand instead.
 
@@ -82,18 +83,17 @@ The dashboard updates within a minute.
 
 ## Your tariff
 
-The database starts with an **example** day/night tariff: 27.577c day, 13.462c night (23:00–08:00) and 90.361c/day standing charge. Replace it with your own:
+`configure.sh` asks for your tariff during setup, and it's applied when ChargeSplit first starts. If you skip it, an example day/night tariff is used until you add your own.
+
+After that, manage tariffs with `tariff.sh` while ChargeSplit is running:
 
 ```bash
-docker compose exec db psql -U chargesplit chargesplit
-```
-```sql
-DELETE FROM chargesplit.tariff;   -- remove the example
-INSERT INTO chargesplit.tariff VALUES ('2026-02-01', 'My supplier', 'Day/Night', 27.577, 13.462, '23:00', '08:00', 90.361);
--- when prices change, add a row from that date; earlier periods keep their old rates
+bash tariff.sh list              # your tariff history
+bash tariff.sh add               # new rates from a date (e.g. a price change), or correct an existing date
+bash tariff.sh remove 2026-02-01 # delete the tariff starting on that date
 ```
 
-Use the rates as they appear on your bill, i.e. including VAT if your bill shows rates with VAT.
+Each tariff applies from its date until the next one, so earlier periods keep their old rates. Changes show on the dashboard straight away, including past periods. Enter rates in cents as they appear on your bill, i.e. including VAT if your bill shows rates with VAT. Once you add a tariff of your own, the example is removed.
 
 Day/night bands use `Europe/Dublin` time. If you're elsewhere, replace `Europe/Dublin` in `collector/schema.sql` and in the dashboard JSON.
 
