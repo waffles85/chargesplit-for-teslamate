@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1 — 2026-11-08
+- `tariff.sh list` shows a setup tariff as "the start" instead of 2000-01-01; `tariff.sh remove start` removes it.
+- The "no tariff" note after `tariff.sh add` only appears when some of your history really has no tariff, and says which date to use.
+
 ## 1.3.0 — 2026-11-08
 - Tariffs without SQL: `configure.sh` asks for your tariff during setup (applied on first start), and the new `tariff.sh` lists, adds and removes tariffs while running.
 - Fix: the example tariff no longer comes back after a restart once you've removed it.

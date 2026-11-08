@@ -3,7 +3,7 @@
 #
 #   bash tariff.sh list            show your tariff history
 #   bash tariff.sh add             add rates from a date (e.g. after a price change), or correct an existing date
-#   bash tariff.sh remove DATE     delete the tariff that starts on DATE (YYYY-MM-DD)
+#   bash tariff.sh remove DATE     delete the tariff that starts on DATE (YYYY-MM-DD, or 'start')
 #
 # Rates are in cents, as on your bill. Each tariff applies from its date until the next one.
 # Changes show on the dashboard straight away, including past periods.
@@ -20,7 +20,7 @@ running=$(docker compose ps --status running --services 2>/dev/null || true)
 grep -qx db <<< "$running" || die "ChargeSplit isn't running — start it with: docker compose up -d"
 
 list() {
-    psqlc -P pager=off -c "SELECT valid_from AS \"from\", COALESCE(supplier,'') AS supplier,
+    psqlc -P pager=off -c "SELECT CASE WHEN valid_from <= '2000-01-01' THEN 'the start' ELSE valid_from::text END AS \"from\", COALESCE(supplier,'') AS supplier,
         day_c_per_kwh AS \"day c/kWh\", night_c_per_kwh AS \"night c/kWh\",
         to_char(night_start,'HH24:MI') || '–' || to_char(night_end,'HH24:MI') AS \"night hours\",
         standing_c_per_day AS \"standing c/day\"
@@ -74,11 +74,13 @@ DELETE FROM chargesplit.tariff WHERE supplier = 'Example'
 COMMIT;
 SQL
     echo "Saved."; list
-    first=$(psqlc -tA -c "SELECT min(valid_from) FROM chargesplit.tariff" | tr -d '\r')
-    echo "Note: costs before $first have no tariff. Add one with an earlier date if your history starts before then." ;;
+    gap=$(psqlc -tA -c "SELECT to_char(min(hour_local), 'YYYY-MM-DD') FROM chargesplit.hourly
+        WHERE hour_local::date < (SELECT min(valid_from) FROM chargesplit.tariff)" | tr -d '\r')
+    [ -z "$gap" ] || echo "Note: your history from $gap has no tariff yet, so it shows no cost. Add a tariff dated $gap or earlier." ;;
 
   remove)
-    d="${2:-}"; is_date "$d" || die "give the start date to remove, e.g.: bash tariff.sh remove 2026-02-01"
+    d="${2:-}"; [ "$d" = "start" ] && d="2000-01-01"
+    is_date "$d" || die "give the start date to remove (as shown by: bash tariff.sh list), e.g.: bash tariff.sh remove 2026-02-01"
     n=$(psqlc -tA -v d="$d" <<'SQL' | tr -d '\r'
 SELECT count(*) FROM chargesplit.tariff WHERE valid_from = :'d'::date;
 SQL
