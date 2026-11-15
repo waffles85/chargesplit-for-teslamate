@@ -40,6 +40,9 @@ KEY = os.environ.get("MYENERGI_API_KEY", "")
 ZAPPI = os.environ.get("MYENERGI_ZAPPI_SERIAL", "")
 HOME_GEOFENCE = os.getenv("HOME_GEOFENCE", "Home")
 OTHER_CAR_NAME_RAW = os.getenv("OTHER_CAR_NAME", "").strip()
+OTHER_CAR_COLOUR_RAW = os.getenv("OTHER_CAR_COLOUR", "").strip()
+DEFAULT_OTHER_COLOUR = "#8F3BB8"   # purple; the template uses this and a lighter shade for session end points
+DEFAULT_OTHER_COLOUR_LIGHT = "#CA95E5"
 DASHBOARD_TEMPLATE = pathlib.Path(os.getenv("DASHBOARD_TEMPLATE", "/app/dashboard-template/chargesplit.json"))
 DASHBOARD_OUT = pathlib.Path(os.getenv("DASHBOARD_OUT", "/app/dashboard-out"))
 READER_PASSWORD = os.getenv("GRAFANA_DB_PASSWORD", "")
@@ -109,17 +112,32 @@ def seed_tariff(conn):
              row[3], row[4], row[5], row[6], row[7], row[0])
 
 
-def render_dashboard(name):
-    """Write the provisioned dashboard with the other car's name filled in."""
+def other_car_colour(raw=None):
+    """Chart colour for the other car: #RRGGBB or a Grafana colour name (e.g. white, orange)."""
+    raw = (OTHER_CAR_COLOUR_RAW if raw is None else raw).strip()
+    if not raw:
+        return DEFAULT_OTHER_COLOUR
+    if re.fullmatch(r"#[0-9A-Fa-f]{6}", raw) or re.fullmatch(r"[a-z][a-z-]{2,19}", raw):
+        return raw.upper() if raw.startswith("#") else raw
+    log.warning("OTHER_CAR_COLOUR %r not allowed (use #RRGGBB or a colour name like white) — using purple", raw)
+    return DEFAULT_OTHER_COLOUR
+
+
+def render_dashboard(name, colour=None):
+    """Write the provisioned dashboard with the other car's name (and colour) filled in."""
+    colour = colour or other_car_colour()
     if not DASHBOARD_TEMPLATE.exists():
         log.warning("dashboard template not found at %s — dashboard keeps its default names", DASHBOARD_TEMPLATE)
         return
     text = DASHBOARD_TEMPLATE.read_text(encoding="utf-8").replace("Other car", name)
+    if colour != DEFAULT_OTHER_COLOUR:
+        # one colour throughout; session end points stay distinguishable by their smaller dots
+        text = text.replace(DEFAULT_OTHER_COLOUR, colour).replace(DEFAULT_OTHER_COLOUR_LIGHT, colour)
     DASHBOARD_OUT.mkdir(parents=True, exist_ok=True)
     tmp = DASHBOARD_OUT / ".chargesplit.json.tmp"
     tmp.write_text(text, encoding="utf-8")
     os.replace(tmp, DASHBOARD_OUT / "chargesplit.json")
-    log.info("dashboard ready (other car shown as '%s')", name)
+    log.info("dashboard ready (other car shown as '%s', colour %s)", name, colour)
 
 
 # ------------------------------------------------------------------ database

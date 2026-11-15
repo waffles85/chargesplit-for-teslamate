@@ -1,7 +1,7 @@
 #!/bin/bash
 # ChargeSplit — interactive setup of .env.
 #   bash configure.sh            first-time setup (asks for everything)
-#   bash configure.sh --name     change only the other car's name
+#   bash configure.sh --name     change only the other car's name and chart colour
 # Tariff changes after the first start: bash tariff.sh
 # Secrets are never shown. Existing values are kept unless you type a new one.
 set -euo pipefail
@@ -38,6 +38,15 @@ ask_time() { # ask_time VAR "question" default
         echo "  a time like 23:00 — try again"
     done
 }
+ask_colour() {
+    local cur ans; cur=$(get OTHER_CAR_COLOUR)
+    while :; do
+        printf 'Chart colour for that car — #RRGGBB or a name like white (Enter = %s): ' "${cur:-purple}"; read -r ans
+        ans="${ans:-$cur}"
+        if [ -z "$ans" ] || printf '%s' "$ans" | grep -Eq '^(#[0-9A-Fa-f]{6}|[a-z][a-z-]{2,19})$'; then put OTHER_CAR_COLOUR "$ans"; return; fi
+        echo "  use #RRGGBB (e.g. #FFFFFF) or a colour name (e.g. white)"
+    done
+}
 ask_tariff() {
     echo
     echo "Your electricity tariff — rates in cents, as on your bill (leave the rates blank to start with an example)."
@@ -69,6 +78,7 @@ chmod 600 "$ENV"
 
 if [ "${1:-}" = "--name" ]; then
     ask_name
+    ask_colour
 else
     echo "ChargeSplit setup — press Enter to keep the value in [brackets]."
     for v in DB_PASSWORD GRAFANA_DB_PASSWORD; do
@@ -80,6 +90,7 @@ else
     ask_secret MYENERGI_API_KEY "myenergi API key"
     ask HOME_GEOFENCE "Name of your home geofence in TeslaMate" "Home"
     ask_name
+    ask_colour
     ask_tariff
     echo
     echo "The tariff is applied when ChargeSplit first starts. For later changes, use: bash tariff.sh"

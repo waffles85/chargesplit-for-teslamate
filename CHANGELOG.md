@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.5.0 — 2026-11-15
+- Choose the other car's chart colour (`OTHER_CAR_COLOUR`, `#RRGGBB` or a name like `white`); asked by `configure.sh`, changeable with `configure.sh --name`.
+
 ## 1.4.0 — 2026-11-08
 - Most detailed data by default:
   - per-minute grid import and Zappi output for your whole history, back-filled on install (and on upgrade)

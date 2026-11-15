@@ -37,6 +37,7 @@ bash configure.sh
 | myenergi hub serial and API key | myaccount.myenergi.com → your hub → Advanced → Generate new API key |
 | Home geofence | The name of your home geofence in TeslaMate, e.g. `Home` |
 | Other car's name | What to call your non-Tesla car on the dashboard, e.g. `Leaf`. Defaults to "Other car". |
+| Other car's colour | Its chart colour: `#RRGGBB` or a name like `white`. Defaults to purple. White suits Grafana's dark theme only. |
 | Tariff | Day and night rates (c/kWh), night-rate hours, standing charge (c/day). Leave blank to start with an example and set it later with `tariff.sh`. |
 
 If your TeslaMate stack doesn't use the default Docker network name, also set `MQTT_DOCKER_NETWORK` in `.env` (check with `docker network ls`). You can also copy `.env.example` to `.env` and edit it by hand instead.
@@ -80,7 +81,7 @@ You can tune `LIVE_SECONDS` (Zappi polling interval) and `LIVE_RETENTION_DAYS` (
 
 **Precision:** Tesla sessions are accurate to about 30 s. Other-car sessions are accurate to the minute: the Zappi has one cable, so every charging minute outside a Tesla session is the other car's. Minute data is fetched for every day of your history; if it’s unavailable for a day, that day falls back to hourly blocks. Costs always come from the metered hourly kWh, so precision doesn't change them.
 
-## Renaming the other car
+## Renaming or recolouring the other car
 
 ```bash
 bash configure.sh --name
